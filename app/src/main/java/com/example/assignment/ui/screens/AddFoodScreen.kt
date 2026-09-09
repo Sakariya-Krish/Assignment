@@ -62,9 +62,11 @@ fun AddFoodScreen(
     val recentItems = items.sortedByDescending { it.createdAt }.take(3)
 
     var name by remember(existingItem, preName) { mutableStateOf(existingItem?.name ?: preName ?: "") }
+    var brand by remember(existingItem) { mutableStateOf(existingItem?.brand ?: "") }
     var category by remember(existingItem, preCategory) { mutableStateOf(existingItem?.category ?: preCategory ?: "Other") }
     var quantity by remember(existingItem, preQuantity) { mutableStateOf(existingItem?.quantity ?: preQuantity ?: "") }
     var unit by remember(existingItem) { mutableStateOf(existingItem?.unit ?: "Pieces") }
+    var price by remember(existingItem) { mutableStateOf(existingItem?.price?.toString() ?: "") }
     var storageLocation by remember(existingItem) { mutableStateOf(existingItem?.storageLocation ?: "Refrigerator") }
     var purchaseDate by remember(existingItem) { mutableStateOf(existingItem?.purchaseDate ?: System.currentTimeMillis()) }
     var expiryDate by remember(existingItem) { mutableStateOf(existingItem?.expiryDate ?: (System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L)) }
@@ -122,9 +124,11 @@ fun AddFoodScreen(
                     val item = FoodItem(
                         id = if (foodId == -1) 0 else foodId,
                         name = name,
+                        brand = brand,
                         category = category,
                         quantity = quantity,
                         unit = unit,
+                        price = price.toDoubleOrNull() ?: 0.0,
                         purchaseDate = purchaseDate,
                         expiryDate = expiryDate,
                         storageLocation = storageLocation,
@@ -240,6 +244,25 @@ fun AddFoodScreen(
                 shape = RoundedCornerShape(12.dp),
                 leadingIcon = { Icon(Icons.Default.Label, contentDescription = null) }
             )
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = brand,
+                    onValueChange = { brand = it },
+                    label = { Text("Brand") },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                OutlinedTextField(
+                    value = price,
+                    onValueChange = { price = it },
+                    label = { Text("Price") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(12.dp),
+                    prefix = { Text("$") }
+                )
+            }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 // Category

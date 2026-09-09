@@ -56,4 +56,31 @@ interface FoodDao {
 
     @Insert
     suspend fun insertSavedRecord(record: FoodSavedRecord)
+
+    // Activity History
+    @Query("SELECT * FROM activity_history ORDER BY timestamp DESC")
+    fun getAllActivityRecords(): Flow<List<ActivityRecord>>
+
+    @Insert
+    suspend fun insertActivityRecord(record: ActivityRecord)
+
+    // Goals
+    @Query("SELECT * FROM goals")
+    fun getAllGoals(): Flow<List<Goal>>
+
+    @Insert
+    suspend fun insertGoal(goal: Goal)
+
+    @Update
+    suspend fun updateGoal(goal: Goal)
+
+    @Delete
+    suspend fun deleteGoal(goal: Goal)
+
+    // User Profile
+    @Query("SELECT * FROM user_profile WHERE id = 1")
+    fun getUserProfile(): Flow<UserProfile?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun updateUserProfile(profile: UserProfile)
 }

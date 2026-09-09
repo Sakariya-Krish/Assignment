@@ -41,6 +41,7 @@ fun FoodDetailsScreen(
     val sdf = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
     
     var showWasteDialog by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
     val wasteReasons = listOf("Expired", "Spoiled", "Too much food", "Not liked", "Other")
     var selectedReason by remember { mutableStateOf(wasteReasons[0]) }
 
@@ -58,10 +59,7 @@ fun FoodDetailsScreen(
                         IconButton(onClick = { onEdit(it.id) }) {
                             Icon(Icons.Default.Edit, contentDescription = "Edit")
                         }
-                        IconButton(onClick = { 
-                            viewModel.delete(it)
-                            onBack()
-                        }) {
+                        IconButton(onClick = { showDeleteConfirm = true }) {
                             Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
                         }
                     }
@@ -86,7 +84,10 @@ fun FoodDetailsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(food.name, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                        Text(food.category, style = MaterialTheme.typography.titleMedium, color = Color.Gray)
+                        if (food.brand.isNotBlank()) {
+                            Text(food.brand, style = MaterialTheme.typography.titleMedium, color = FoodGreen)
+                        }
+                        Text(food.category, style = MaterialTheme.typography.titleSmall, color = Color.Gray)
                     }
                     
                     val daysLeft = ((food.expiryDate - System.currentTimeMillis()) / (24 * 60 * 60 * 1000)).toInt()
@@ -116,11 +117,12 @@ fun FoodDetailsScreen(
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         DetailRow("Quantity", "${food.quantity} ${food.unit}")
-                        DetailRow("Storage Location", food.storageLocation)
+                        if (food.price > 0) DetailRow("Price", "$${String.format(Locale.getDefault(), "%.2f", food.price)}")
+                        DetailRow("Storage", food.storageLocation)
                         DetailRow("Purchase Date", sdf.format(Date(food.purchaseDate)))
                         DetailRow("Expiry Date", sdf.format(Date(food.expiryDate)))
                         DetailRow("Time Remaining", if (daysLeft < 0) "Expired" else "$daysLeft days left")
-                        if (food.barcode != null) DetailRow("Barcode", food.barcode)
+                        if (!food.barcode.isNullOrBlank()) DetailRow("Barcode", food.barcode)
                         DetailRow("Notes", food.notes.ifEmpty { "No notes provided" })
                     }
                 }
@@ -199,6 +201,24 @@ fun FoodDetailsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showWasteDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Food?") },
+            text = { Text("Are you sure you want to remove this item permanently?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    item?.let { viewModel.delete(it) }
+                    showDeleteConfirm = false
+                    onBack()
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
             }
         )
     }

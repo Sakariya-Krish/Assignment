@@ -1,22 +1,32 @@
 package com.example.assignment.viewmodel
 
 import android.app.Application
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.core.content.FileProvider
 import com.example.assignment.data.*
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.Calendar
 
 class FoodViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: FoodRepository
     private val settingsManager = SettingsManager(application)
+    private val gson = Gson()
     
     val allItems: StateFlow<List<FoodItem>>
     val allShoppingItems: StateFlow<List<ShoppingItem>>
     val allWasteRecords: StateFlow<List<WasteRecord>>
     val savedCount: StateFlow<Int>
     val frequentlyConsumedItems: StateFlow<List<FoodItem>>
+    val allGoals: StateFlow<List<Goal>>
+    val activityHistory: StateFlow<List<ActivityRecord>>
+    val userProfile: StateFlow<UserProfile?>
     
     val notificationsEnabled = settingsManager.notificationsEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     val darkModeEnabled = settingsManager.darkModeEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -30,15 +40,28 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
         allWasteRecords = repository.allWasteRecords.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
         savedCount = repository.savedCount.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
         frequentlyConsumedItems = repository.frequentlyConsumedItems.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        allGoals = repository.allGoals.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        activityHistory = repository.allActivityRecords.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        userProfile = repository.userProfile.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserProfile())
     }
 
-    fun insert(item: FoodItem) = viewModelScope.launch { repository.insert(item) }
+    // User Profile Actions
+    fun updateProfile(name: String, imageUri: String?, currency: String, unit: String) = viewModelScope.launch {
+        repository.updateUserProfile(UserProfile(name = name, profileImageUri = imageUri, currency = currency, preferredUnit = unit))
+    }
+
+    fun insert(item: FoodItem) = viewModelScope.launch { 
+        repository.insert(item)
+        repository.insertActivityRecord(ActivityRecord(foodName = item.name, action = "ADDED", details = "Added to inventory"))
+    }
     fun update(item: FoodItem) = viewModelScope.launch { repository.update(item) }
     fun delete(item: FoodItem) = viewModelScope.launch { repository.delete(item) }
     
     fun markAsConsumed(item: FoodItem) = viewModelScope.launch { 
         repository.update(item.copy(status = FoodStatus.CONSUMED))
         repository.insertSavedRecord(FoodSavedRecord(foodName = item.name))
+        repository.insertActivityRecord(ActivityRecord(foodName = item.name, action = "CONSUMED", details = "Marked as consumed"))
+        updateGoalProgress("FOOD_SAVED", 1f)
     }
     
     fun markAsWasted(item: FoodItem, reason: String) = viewModelScope.launch { 
@@ -47,8 +70,11 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
             foodName = item.name,
             category = item.category,
             quantity = item.quantity,
+            price = item.price,
             reason = reason
         ))
+        repository.insertActivityRecord(ActivityRecord(foodName = item.name, action = "WASTED", details = "Reason: $reason"))
+        updateGoalProgress("WASTE_TRACKED", 1f)
     }
     
     fun clearAllData() = viewModelScope.launch { repository.deleteAll() }
@@ -62,6 +88,7 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
             category = category, 
             notes = notes
         ))
+        repository.insertActivityRecord(ActivityRecord(foodName = name, action = "ADDED_TO_SHOPPING", details = "Added to shopping list"))
     }
 
     fun updateShoppingItem(item: ShoppingItem) = viewModelScope.launch {
@@ -69,10 +96,14 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleShoppingItem(item: ShoppingItem) = viewModelScope.launch {
+        val newState = !item.isPurchased
         repository.updateShoppingItem(item.copy(
-            isPurchased = !item.isPurchased,
-            purchasedAt = if (!item.isPurchased) System.currentTimeMillis() else null
+            isPurchased = newState,
+            purchasedAt = if (newState) System.currentTimeMillis() else null
         ))
+        if (newState) {
+            repository.insertActivityRecord(ActivityRecord(foodName = item.name, action = "PURCHASED", details = "Marked as purchased"))
+        }
     }
 
     fun deleteShoppingItem(item: ShoppingItem) = viewModelScope.launch {
@@ -83,6 +114,22 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
         repository.clearPurchasedShoppingItems()
     }
 
+    // Goals
+    fun addGoal(title: String, target: Float, type: String) = viewModelScope.launch {
+        repository.insertGoal(Goal(title = title, targetValue = target, type = type))
+    }
+    
+    private suspend fun updateGoalProgress(type: String, increment: Float) {
+        val activeGoals = allGoals.value.filter { it.type == type && !it.isCompleted }
+        activeGoals.forEach { goal ->
+            val newValue = goal.currentValue + increment
+            repository.updateGoal(goal.copy(
+                currentValue = newValue,
+                isCompleted = newValue >= goal.targetValue
+            ))
+        }
+    }
+
     fun toggleNotifications(enabled: Boolean) = viewModelScope.launch { settingsManager.setNotificationsEnabled(enabled) }
     fun setDarkMode(enabled: Boolean?) = viewModelScope.launch { settingsManager.setDarkModeEnabled(enabled) }
 
@@ -90,12 +137,25 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
         val total = items.size
         val consumed = items.count { it.status == FoodStatus.CONSUMED }
         val expired = items.count { it.status == FoodStatus.FRESH && it.expiryDate < System.currentTimeMillis() }
-        
         val totalWaste = wasteRecords.size
+        
+        val expiringToday = items.count { it.status == FoodStatus.FRESH && isSameDay(it.expiryDate, System.currentTimeMillis()) }
+        val expiringThisWeek = items.count { 
+            val diff = it.expiryDate - System.currentTimeMillis()
+            it.status == FoodStatus.FRESH && diff in 0..(7 * 24 * 60 * 60 * 1000L) 
+        }
+
         val wastePercentage = if (consumed + totalWaste > 0) {
             (totalWaste.toFloat() / (consumed + totalWaste)) * 100
         } else 0f
         
+        val wasteReduction = if (wastePercentage < 20) 20 - wastePercentage else 0f
+
+        // Financial Stats
+        val totalFoodCost = items.sumOf { it.price }
+        val moneyWasted = wasteRecords.sumOf { it.price }
+
+        // Food Saving Score calculation
         val deductions = (totalWaste * 5) + (expired * 2)
         val savingScore = (100 - deductions).coerceIn(0, 100)
         
@@ -118,11 +178,16 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
             consumed = consumed,
             wasted = totalWaste,
             expired = expired,
+            expiringToday = expiringToday,
+            expiringThisWeek = expiringThisWeek,
             wastePercentage = wastePercentage,
+            wasteReduction = wasteReduction,
             savedCount = saved,
             mostWastedCategory = mostWastedCategory,
             mostWastedFood = mostWastedFood,
             savingScore = savingScore,
+            totalFoodCost = totalFoodCost,
+            moneyWasted = moneyWasted,
             achievements = achievements
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), EnhancedStats2())
@@ -131,6 +196,14 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
         val freshItems = items.filter { it.status == FoodStatus.FRESH }.map { it.name.lowercase() }
         suggestAdvancedRecipes(freshItems)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun addMissingIngredientsToShoppingList(recipe: Recipe) = viewModelScope.launch {
+        recipe.missingIngredients.forEach { ingredient ->
+            if (allShoppingItems.value.none { it.name.equals(ingredient, ignoreCase = true) && !it.isPurchased }) {
+                repository.insertShoppingItem(ShoppingItem(name = ingredient, quantity = "1", category = "Other"))
+            }
+        }
+    }
 
     val shoppingSuggestions = combine(allItems, allShoppingItems) { foodItems, shopItems ->
         val currentShopNames = shopItems.map { it.name.lowercase() }
@@ -144,6 +217,7 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
     // Food Insights
     val insights = stats.map { s ->
         val list = mutableListOf<String>()
+        if (s.expiringToday > 0) list.add("You have ${s.expiringToday} items expiring today!")
         if (s.expired > 0) list.add("You have ${s.expired} expired items. Clear them to see better stats.")
         if (s.wasted > 0) list.add("${s.mostWastedCategory} is your most wasted category.")
         if (s.savedCount > 0) list.add("You've saved ${s.savedCount} items! Great impact.")
@@ -151,6 +225,42 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
         if (list.isEmpty()) list.add("Your food inventory looks healthy!")
         list
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("Loading insights..."))
+    
+    private fun isSameDay(t1: Long, t2: Long): Boolean {
+        val cal1 = Calendar.getInstance().apply { timeInMillis = t1 }
+        val cal2 = Calendar.getInstance().apply { timeInMillis = t2 }
+        return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
+               cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
+    }
+
+    // Backup & Restore
+    fun exportData(context: Context): Uri? {
+        val backupData = BackupData(
+            foodItems = allItems.value,
+            shoppingItems = allShoppingItems.value,
+            wasteRecords = allWasteRecords.value,
+            goals = allGoals.value
+        )
+        val json = gson.toJson(backupData)
+        return try {
+            val file = File(context.cacheDir, "foodtrack_backup.json")
+            file.writeText(json)
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        } catch (e: Exception) { null }
+    }
+
+    fun importData(context: Context, uri: Uri) = viewModelScope.launch {
+        try {
+            val json = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            if (json != null) {
+                val backupData = gson.fromJson(json, BackupData::class.java)
+                backupData.foodItems.forEach { repository.insert(it) }
+                backupData.shoppingItems.forEach { repository.insertShoppingItem(it) }
+                backupData.wasteRecords.forEach { repository.insertWasteRecord(it) }
+                backupData.goals.forEach { repository.insertGoal(it) }
+            }
+        } catch (e: Exception) { }
+    }
 
     // Assistant Logic
     private val _chatMessages = MutableStateFlow(listOf(Message("Assistant", "Hi! I'm your Food Assistant. How can I help you today?")))
@@ -171,24 +281,38 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
         val items = allItems.value.filter { it.status == FoodStatus.FRESH }
         
         return when {
-            query.contains("eat first") || query.contains("expire") -> {
+            query.contains("eat first") || query.contains("expire") || query.contains("what should i eat") -> {
                 val soon = items.sortedBy { it.expiryDate }.take(3)
                 if (soon.isEmpty()) "You don't have any fresh food items."
                 else "You should use these soon: " + soon.joinToString(", ") { it.name }
             }
-            query.contains("cook") || query.contains("recipe") -> {
+            query.contains("cook") || query.contains("recipe") || query.contains("what can i cook") -> {
                 val suggestions = recipeSuggestions.value
                 if (suggestions.isEmpty()) "I couldn't find recipes for your current ingredients. Try adding more variety."
-                else "You can make: " + suggestions.take(2).joinToString(" or ") { it.name }
+                else {
+                    val recipe = suggestions.first()
+                    "You have almost everything for a ${recipe.name}. You just need ${recipe.missingIngredients.joinToString(", ")}."
+                }
             }
-            query.contains("waste") -> {
+            query.contains("waste") || query.contains("wasting") -> {
                 val s = stats.value
-                "Your most wasted category is ${s.mostWastedCategory}."
+                "Your most wasted category is ${s.mostWastedCategory} and most wasted item is ${s.mostWastedFood}."
+            }
+            query.contains("saved") || query.contains("impact") -> {
+                val s = stats.value
+                "You have saved ${s.savedCount} food items so far! Your food saving score is ${s.savingScore}/100."
             }
             else -> "I can help you with what to eat first, recipe suggestions based on your food, or waste analysis. What would you like to know?"
         }
     }
 }
+
+data class BackupData(
+    val foodItems: List<FoodItem>,
+    val shoppingItems: List<ShoppingItem>,
+    val wasteRecords: List<WasteRecord>,
+    val goals: List<Goal>
+)
 
 data class Message(val sender: String, val text: String)
 
@@ -200,11 +324,16 @@ data class EnhancedStats2(
     val consumed: Int = 0,
     val wasted: Int = 0,
     val expired: Int = 0,
+    val expiringToday: Int = 0,
+    val expiringThisWeek: Int = 0,
     val wastePercentage: Float = 0f,
+    val wasteReduction: Float = 0f,
     val savedCount: Int = 0,
     val mostWastedCategory: String = "N/A",
     val mostWastedFood: String = "N/A",
     val savingScore: Int = 0,
+    val totalFoodCost: Double = 0.0,
+    val moneyWasted: Double = 0.0,
     val achievements: List<Achievement> = emptyList()
 )
 
@@ -212,7 +341,9 @@ data class Recipe(
     val name: String, 
     val ingredients: List<String>, 
     val steps: String,
-    val cookingTime: String = "15 mins"
+    val cookingTime: String = "15 mins",
+    val availableIngredients: List<String> = emptyList(),
+    val missingIngredients: List<String> = emptyList()
 )
 
 fun suggestAdvancedRecipes(availableItems: List<String>): List<Recipe> {
@@ -223,7 +354,10 @@ fun suggestAdvancedRecipes(availableItems: List<String>): List<Recipe> {
         Recipe("Pasta with Veggies", listOf("pasta", "tomato", "onion", "garlic"), "1. Boil pasta. 2. Make sauce with veggies. 3. Mix and enjoy.", "20 mins")
     )
     
-    return recipes.filter { recipe ->
-        recipe.ingredients.any { ingredient -> availableItems.any { it.contains(ingredient) } }
-    }
+    return recipes.map { recipe ->
+        val available = recipe.ingredients.filter { ing -> availableItems.any { it.contains(ing) } }
+        val missing = recipe.ingredients.filter { ing -> availableItems.none { it.contains(ing) } }
+        recipe.copy(availableIngredients = available, missingIngredients = missing)
+    }.filter { it.availableIngredients.isNotEmpty() }
+     .sortedBy { it.missingIngredients.size }
 }

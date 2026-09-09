@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -26,9 +27,12 @@ fun MoreScreen(
 ) {
     val moreItems = listOf(
         MoreItem("Use First", "Priority food items", Icons.Default.PriorityHigh, Screen.UseFirst.route),
+        MoreItem("Expiry Calendar", "View food by date", Icons.Default.CalendarMonth, Screen.ExpiryCalendar.route),
+        MoreItem("Activity History", "Food tracking timeline", Icons.Default.History, Screen.ActivityHistory.route),
         MoreItem("Statistics", "Waste and impact analysis", Icons.Default.BarChart, Screen.Statistics.route),
         MoreItem("Food Assistant", "Get smart suggestions", Icons.Default.Assistant, Screen.FoodAssistant.route),
         MoreItem("Achievements", "Unlock saving goals", Icons.Default.Star, Screen.Achievements.route),
+        MoreItem("Profile & Backup", "User info and data", Icons.Default.Person, Screen.Profile.route),
         MoreItem("Settings", "App preferences", Icons.Default.Settings, Screen.Settings.route)
     )
 

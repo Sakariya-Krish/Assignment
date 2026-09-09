@@ -90,7 +90,16 @@ fun FoodTrackApp() {
                     onBack = { navController.popBackStack() }
                 ) 
             }
+            composable(Screen.ExpiryCalendar.route) {
+                ExpiryCalendarScreen(
+                    viewModel = viewModel,
+                    onNavigateToDetails = { id -> navController.navigate(Screen.FoodDetails.route.replace("{foodId}", id.toString())) },
+                    onBack = { navController.popBackStack() }
+                )
+            }
             composable(Screen.Achievements.route) { AchievementsScreen(viewModel, onBack = { navController.popBackStack() }) }
+            composable(Screen.ActivityHistory.route) { ActivityHistoryScreen(viewModel, onBack = { navController.popBackStack() }) }
+            composable(Screen.Profile.route) { ProfileScreen(viewModel, onBack = { navController.popBackStack() }) }
 
             composable(
                 route = "add_food?foodId={foodId}&scannedBarcode={scannedBarcode}&preName={preName}&preCategory={preCategory}&preQuantity={preQuantity}",

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -13,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -38,117 +40,208 @@ fun HomeScreen(
     val recipes by viewModel.recipeSuggestions.collectAsState()
     val insights by viewModel.insights.collectAsState()
 
+    var selectedRecipe by remember { mutableStateOf<com.example.assignment.viewmodel.Recipe?>(null) }
+
     val freshItems = items.filter { it.status == FoodStatus.FRESH }
     val expiringToday = freshItems.filter { isSameDay(it.expiryDate, System.currentTimeMillis()) }
     val useFirst = freshItems.sortedBy { it.expiryDate }.take(5)
     
     val toBuyCount = shoppingItems.count { !it.isPurchased }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    AnimatedVisibility(
+        visible = true,
+        enter = fadeIn() + slideInVertically()
     ) {
-        item {
-            Text("FoodTrack v3.0", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = FoodGreen)
-        }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Text(
+                    text = "FoodTrack v3.0",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = FoodGreen
+                )
+            }
 
-        // Insights Section
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Lightbulb, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Food Insights", fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    insights.take(2).forEach { insight ->
-                        Text("• $insight", style = MaterialTheme.typography.bodySmall)
+            // Insights Section
+            item {
+                AnimatedContent(targetState = insights, label = "InsightsAnimation") { currentInsights ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                        shape = RoundedCornerShape(24.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Lightbulb, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("Food Insights", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            currentInsights.take(3).forEach { insight ->
+                                Row(modifier = Modifier.padding(vertical = 4.dp)) {
+                                    Text("•", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(insight, style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+                        }
                     }
                 }
             }
-        }
 
-        // Quick Actions
-        item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                QuickActionCard("Add", Icons.Default.Add, Modifier.weight(1f), onNavigateToAdd)
-                QuickActionCard("Scan", Icons.Default.QrCodeScanner, Modifier.weight(1f), onNavigateToScanner)
-                QuickActionCard("Shop", Icons.Default.ShoppingCart, Modifier.weight(1f), onNavigateToShopping)
-            }
-        }
-
-        // Shopping List Card
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth().clickable(onClick = onNavigateToShopping),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-            ) {
-                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Shopping List", fontWeight = FontWeight.Bold)
-                        Text(if (toBuyCount > 0) "$toBuyCount items to buy" else "Everything purchased", style = MaterialTheme.typography.bodySmall)
-                    }
-                    Icon(Icons.Default.ChevronRight, contentDescription = null)
+            // Quick Actions
+            item {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    QuickActionCard("Add Food", Icons.Default.Add, Modifier.weight(1f), onNavigateToAdd)
+                    QuickActionCard("Scan Barcode", Icons.Default.QrCodeScanner, Modifier.weight(1f), onNavigateToScanner)
+                    QuickActionCard("Grocery List", Icons.Default.ShoppingCart, Modifier.weight(1f), onNavigateToShopping)
                 }
             }
-        }
 
-        // Saving Score
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = FoodGreen)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Food Saving Score", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("${stats.savingScore}", color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.Black)
-                        Text("/100", color = Color.White.copy(alpha = 0.7f), fontSize = 20.sp)
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            text = when {
-                                stats.savingScore >= 90 -> "Excellent!"
-                                stats.savingScore >= 70 -> "Good job!"
-                                else -> "Keep improving!"
-                            },
+            // Impact Score
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = FoodGreen),
+                    shape = RoundedCornerShape(24.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column {
+                                Text("Food Saving Score", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                                Text("Waste Reduction: ${String.format(Locale.getDefault(), "%.0f", stats.wasteReduction)}%", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
+                            }
+                            Text("${stats.savingScore}", color = Color.White, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Black)
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        LinearProgressIndicator(
+                            progress = stats.savingScore / 100f,
+                            modifier = Modifier.fillMaxWidth().height(10.dp).clip(CircleShape),
                             color = Color.White,
-                            fontWeight = FontWeight.Bold
+                            trackColor = Color.White.copy(alpha = 0.3f)
                         )
                     }
                 }
             }
-        }
 
-        if (expiringToday.isNotEmpty()) {
-            item { SectionHeader("Expiring Today", Color.Red) }
-            items(expiringToday) { item ->
-                FoodSummaryItem(item, onClick = { onNavigateToDetails(item.id) })
-            }
-        }
-
-        if (useFirst.isNotEmpty()) {
-            item { SectionHeader("Use First", FoodGreen) }
-            items(useFirst) { item ->
-                FoodSummaryItem(item, onClick = { onNavigateToDetails(item.id) })
-            }
-        }
-
-        if (recipes.isNotEmpty()) {
-            item { SectionHeader("Cook Before Expiry", FoodGreen) }
+            // Statistics Summary
             item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(recipes) { recipe -> RecipeCard(recipe) }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    StatCard("Expiring Today", stats.expiringToday.toString(), Modifier.weight(1f), if(stats.expiringToday > 0) Color.Red else Color.Gray, Icons.Default.Warning)
+                    StatCard("Saved Items", stats.savedCount.toString(), Modifier.weight(1f), FoodGreen, Icons.Default.CheckCircle)
                 }
             }
+
+            // Shopping Summary Card
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable(onClick = onNavigateToShopping),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Surface(color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.1f), shape = CircleShape, modifier = Modifier.size(48.dp)) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Shopping List", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(if (toBuyCount > 0) "$toBuyCount items to buy" else "Everything purchased", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.Gray)
+                    }
+                }
+            }
+
+            if (expiringToday.isNotEmpty()) {
+                item { SectionHeader("Expiring Today", Color.Red) }
+                items(expiringToday) { item ->
+                    FoodSummaryItem(item, onClick = { onNavigateToDetails(item.id) })
+                }
+            }
+
+            if (useFirst.isNotEmpty()) {
+                item { SectionHeader("Use First", FoodGreen) }
+                items(useFirst) { item ->
+                    FoodSummaryItem(item, onClick = { onNavigateToDetails(item.id) })
+                }
+            }
+
+            if (recipes.isNotEmpty()) {
+                item { SectionHeader("What Can I Cook?", FoodGreen) }
+                item {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
+                        items(recipes) { recipe -> 
+                            RecipeCard(recipe, onClick = { selectedRecipe = recipe }) 
+                        }
+                    }
+                }
+            }
+            
+            item { Spacer(Modifier.height(32.dp)) }
         }
     }
+
+    if (selectedRecipe != null) {
+        RecipeDetailsDialog(
+            recipe = selectedRecipe!!,
+            onDismiss = { selectedRecipe = null },
+            onAddMissing = {
+                viewModel.addMissingIngredientsToShoppingList(selectedRecipe!!)
+                selectedRecipe = null
+            }
+        )
+    }
+}
+
+@Composable
+fun RecipeDetailsDialog(recipe: com.example.assignment.viewmodel.Recipe, onDismiss: () -> Unit, onAddMissing: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(recipe.name, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Cooking Time: ${recipe.cookingTime}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                
+                Text("Ingredients:", fontWeight = FontWeight.Bold)
+                recipe.ingredients.forEach { ing ->
+                    val isAvailable = recipe.availableIngredients.contains(ing)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (isAvailable) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                            contentDescription = null,
+                            tint = if (isAvailable) FoodGreen else Color.Gray,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(ing, color = if (isAvailable) Color.Unspecified else Color.Gray)
+                    }
+                }
+
+                Text("Steps:", fontWeight = FontWeight.Bold)
+                Text(recipe.steps)
+                
+                if (recipe.missingIngredients.isNotEmpty()) {
+                    Button(
+                        onClick = onAddMissing,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer)
+                    ) {
+                        Text("Add Missing Items to Shopping List")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
 }
 
 @Composable
@@ -156,14 +249,17 @@ fun QuickActionCard(label: String, icon: ImageVector, modifier: Modifier, onClic
     Card(
         modifier = modifier.clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Icon(icon, contentDescription = null, tint = FoodGreen)
-            Text(label, style = MaterialTheme.typography.labelSmall)
+            Icon(icon, contentDescription = null, tint = FoodGreen, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.height(8.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }
     }
 }
@@ -180,18 +276,40 @@ fun SectionHeader(title: String, color: Color) {
 }
 
 @Composable
-fun RecipeCard(recipe: com.example.assignment.viewmodel.Recipe) {
+fun RecipeCard(recipe: com.example.assignment.viewmodel.Recipe, onClick: () -> Unit) {
     Card(
-        modifier = Modifier.width(200.dp).height(140.dp),
+        modifier = Modifier.width(200.dp).height(140.dp).clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(recipe.name, fontWeight = FontWeight.Bold, maxLines = 1)
             Text("⏱ ${recipe.cookingTime}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(recipe.ingredients.joinToString(", "), style = MaterialTheme.typography.bodySmall, maxLines = 2)
+            
+            val matchText = "${recipe.availableIngredients.size}/${recipe.ingredients.size} match"
+            Text(matchText, style = MaterialTheme.typography.labelSmall, color = FoodGreen, fontWeight = FontWeight.Bold)
+            
             Spacer(modifier = Modifier.weight(1f))
-            Text("Cook Now", style = MaterialTheme.typography.labelSmall, color = FoodGreen, fontWeight = FontWeight.Bold)
+            Text("View Recipe", style = MaterialTheme.typography.labelSmall, color = FoodGreen, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+fun StatCard(label: String, value: String, modifier: Modifier = Modifier, color: Color, icon: ImageVector) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = color)
         }
     }
 }
@@ -200,11 +318,12 @@ fun RecipeCard(recipe: com.example.assignment.viewmodel.Recipe) {
 fun FoodSummaryItem(item: FoodItem, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(16.dp)
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(item.name, fontWeight = FontWeight.Bold)
+                Text(item.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(item.category, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             }
             val daysLeft = ((item.expiryDate - System.currentTimeMillis()) / (24 * 60 * 60 * 1000)).toInt()
@@ -226,15 +345,15 @@ fun FoodSummaryItem(item: FoodItem, onClick: () -> Unit) {
             }
 
             Surface(
-                color = color.copy(alpha = 0.1f),
-                shape = RoundedCornerShape(8.dp)
+                color = color.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Text(
                     text = statusText,
                     color = color,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    fontSize = 12.sp
+                    fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    fontSize = 13.sp
                 )
             }
         }

@@ -27,32 +27,31 @@ class NotificationWorker(context: Context, params: WorkerParameters) : Coroutine
 
         val freshItems = items.filter { it.status == FoodStatus.FRESH }
         
-        val expiringToday = freshItems.filter { item ->
+        freshItems.forEach { item ->
             val diff = item.expiryDate - now
-            diff in 0..TimeUnit.HOURS.toMillis(1) // Roughly today
-        }
-        
-        val expiringSoon = freshItems.filter { item ->
-            val diff = item.expiryDate - now
-            diff in 0..(3 * dayInMillis)
-        }
-
-        if (expiringToday.isNotEmpty()) {
-            val names = expiringToday.joinToString(", ") { it.name }
-            sendNotification(999, "Use Today!", "Use your $names today to reduce food waste.")
-        } else if (expiringSoon.size >= 3) {
-            sendNotification(888, "Expiring Soon", "You have ${expiringSoon.size} foods expiring soon.")
-        }
-
-        expiringSoon.forEach { item ->
-            val diff = item.expiryDate - now
-            val message = when {
-                diff in 0..dayInMillis -> "${item.name} expires tomorrow. Use it soon."
-                diff in (2 * dayInMillis)..(3 * dayInMillis) -> "${item.name} expires in 3 days."
+            val daysLeft = (diff / dayInMillis).toInt()
+            
+            val milestone = when {
+                diff < 0 -> -1 // Expired
+                diff <= TimeUnit.HOURS.toMillis(1) -> 0 // Today
+                daysLeft == 1 -> 1 // Tomorrow
+                daysLeft == 3 -> 3 // 3 days
                 else -> null
             }
-            if (message != null) {
-                sendNotification(item.id, "Food Expiry", message)
+
+            if (milestone != null && milestone != item.lastNotificationMilestone) {
+                val message = when (milestone) {
+                    -1 -> "${item.name} has expired."
+                    0 -> "${item.name} expires today! Use it now."
+                    1 -> "${item.name} expires tomorrow. Use it soon."
+                    3 -> "${item.name} expires in 3 days."
+                    else -> ""
+                }
+                
+                if (message.isNotEmpty()) {
+                    sendNotification(item.id, "Food Expiry", message)
+                    foodDao.update(item.copy(lastNotificationMilestone = milestone))
+                }
             }
         }
 
@@ -61,7 +60,7 @@ class NotificationWorker(context: Context, params: WorkerParameters) : Coroutine
 
     private fun sendNotification(id: Int, title: String, message: String) {
         val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val channelId = "food_expiry_channel_v2"
+        val channelId = "food_expiry_channel_v3"
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(channelId, "Food Expiry Reminders", NotificationManager.IMPORTANCE_DEFAULT)

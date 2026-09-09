@@ -23,4 +23,15 @@ class FoodRepository(private val foodDao: FoodDao) {
 
     suspend fun insertWasteRecord(record: WasteRecord) = foodDao.insertWasteRecord(record)
     suspend fun insertSavedRecord(record: FoodSavedRecord) = foodDao.insertSavedRecord(record)
+
+    val allActivityRecords: Flow<List<ActivityRecord>> = foodDao.getAllActivityRecords()
+    suspend fun insertActivityRecord(record: ActivityRecord) = foodDao.insertActivityRecord(record)
+
+    val allGoals: Flow<List<Goal>> = foodDao.getAllGoals()
+    suspend fun insertGoal(goal: Goal) = foodDao.insertGoal(goal)
+    suspend fun updateGoal(goal: Goal) = foodDao.updateGoal(goal)
+    suspend fun deleteGoal(goal: Goal) = foodDao.deleteGoal(goal)
+
+    val userProfile: Flow<UserProfile?> = foodDao.getUserProfile()
+    suspend fun updateUserProfile(profile: UserProfile) = foodDao.updateUserProfile(profile)
 }
