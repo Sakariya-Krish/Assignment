@@ -6,6 +6,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,31 +27,43 @@ fun SettingsScreen(viewModel: FoodViewModel) {
 
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        Text("Settings v2.0", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = FoodGreen)
+        Text(
+            text = "Settings", 
+            style = MaterialTheme.typography.headlineMedium, 
+            fontWeight = FontWeight.ExtraBold, 
+            color = FoodGreen
+        )
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
                 Text("Preferences", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 SettingsToggle(
-                    title = "Notifications",
-                    subtitle = "Expiry and waste reminders",
+                    title = "Push Notifications",
+                    subtitle = "Get reminders before food expires",
                     checked = notificationsEnabled,
                     onCheckedChange = { viewModel.toggleNotifications(it) }
                 )
+                Divider(modifier = Modifier.padding(vertical = 12.dp), thickness = 0.5.dp, color = Color.LightGray.copy(alpha = 0.5f))
                 SettingsToggle(
                     title = "Dark Mode",
-                    subtitle = "Follow system or manual override",
+                    subtitle = "Always use dark theme",
                     checked = darkModeEnabled == true,
                     onCheckedChange = { viewModel.setDarkMode(it) }
                 )
             }
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("Data Management", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 
                 Button(
@@ -59,7 +72,7 @@ fun SettingsScreen(viewModel: FoodViewModel) {
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Reset All Application Data")
+                    Text("Clear All Data", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -70,17 +83,19 @@ fun SettingsScreen(viewModel: FoodViewModel) {
             shape = RoundedCornerShape(12.dp)
         ) {
             Icon(Icons.Default.Info, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("About FoodTrack")
+            Spacer(modifier = Modifier.width(12.dp))
+            Text("About FoodTrack", fontWeight = FontWeight.Bold)
         }
         
         Text(
-            "Version 2.0.0",
+            "Version 3.0.0",
             modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.bodySmall,
             color = Color.Gray,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
+        
+        Spacer(Modifier.height(80.dp))
     }
 
     if (showDeleteDialog) {
@@ -109,9 +124,9 @@ fun SettingsScreen(viewModel: FoodViewModel) {
             text = {
                 Column {
                     Text("Food Expiry & Waste Tracker", fontWeight = FontWeight.Bold, color = FoodGreen)
-                    Text("Version 2.0")
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Developed to help households reduce food waste through smart tracking and recipe suggestions.")
+                    Text("Helping households reduce food waste since 2024.")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Developed with ❤️ using Jetpack Compose.")
                 }
             },
             confirmButton = {
@@ -124,13 +139,17 @@ fun SettingsScreen(viewModel: FoodViewModel) {
 @Composable
 fun SettingsToggle(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(
+            checked = checked, 
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(checkedThumbColor = FoodGreen)
+        )
     }
 }

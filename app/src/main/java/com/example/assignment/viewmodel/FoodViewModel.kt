@@ -3,16 +3,18 @@ package com.example.assignment.viewmodel
 import android.app.Application
 import android.content.Context
 import android.net.Uri
+import android.util.Log
+import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.core.content.FileProvider
 import com.example.assignment.data.*
+import com.example.assignment.util.DateUtils
+import com.example.assignment.util.ExpiryStatus
+import com.example.assignment.util.getExpiryStatus
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
-import java.util.Calendar
 
 class FoodViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: FoodRepository
@@ -47,7 +49,11 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
 
     // User Profile Actions
     fun updateProfile(name: String, imageUri: String?, currency: String, unit: String) = viewModelScope.launch {
-        repository.updateUserProfile(UserProfile(name = name, profileImageUri = imageUri, currency = currency, preferredUnit = unit))
+        try {
+            repository.updateUserProfile(UserProfile(name = name, profileImageUri = imageUri, currency = currency, preferredUnit = unit))
+        } catch (e: Exception) {
+            Log.e("FoodViewModel", "Error updating profile", e)
+        }
     }
 
     fun insert(item: FoodItem) = viewModelScope.launch { 
@@ -136,17 +142,17 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
     val stats = combine(allItems, allWasteRecords, savedCount) { items, wasteRecords, saved ->
         val total = items.size
         val consumed = items.count { it.status == FoodStatus.CONSUMED }
-        val expired = items.count { it.status == FoodStatus.FRESH && it.expiryDate < System.currentTimeMillis() }
-        val totalWaste = wasteRecords.size
+        val expired = items.count { it.status == FoodStatus.FRESH && getExpiryStatus(it.expiryDate) == ExpiryStatus.EXPIRED }
+        val totalWasteCount = wasteRecords.size
         
-        val expiringToday = items.count { it.status == FoodStatus.FRESH && isSameDay(it.expiryDate, System.currentTimeMillis()) }
+        val expiringToday = items.count { it.status == FoodStatus.FRESH && getExpiryStatus(it.expiryDate) == ExpiryStatus.EXPIRING_TODAY }
         val expiringThisWeek = items.count { 
-            val diff = it.expiryDate - System.currentTimeMillis()
-            it.status == FoodStatus.FRESH && diff in 0..(7 * 24 * 60 * 60 * 1000L) 
+            val status = getExpiryStatus(it.expiryDate)
+            it.status == FoodStatus.FRESH && (status == ExpiryStatus.EXPIRING_SOON || status == ExpiryStatus.EXPIRING_TODAY)
         }
 
-        val wastePercentage = if (consumed + totalWaste > 0) {
-            (totalWaste.toFloat() / (consumed + totalWaste)) * 100
+        val wastePercentage = if (consumed + totalWasteCount > 0) {
+            (totalWasteCount.toFloat() / (consumed + totalWasteCount)) * 100
         } else 0f
         
         val wasteReduction = if (wastePercentage < 20) 20 - wastePercentage else 0f
@@ -156,7 +162,7 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
         val moneyWasted = wasteRecords.sumOf { it.price }
 
         // Food Saving Score calculation
-        val deductions = (totalWaste * 5) + (expired * 2)
+        val deductions = (totalWasteCount * 5) + (expired * 2)
         val savingScore = (100 - deductions).coerceIn(0, 100)
         
         val mostWastedCategory = wasteRecords.groupBy { it.category }
@@ -174,9 +180,9 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
 
         EnhancedStats2(
             total = total,
-            fresh = items.count { it.status == FoodStatus.FRESH && it.expiryDate >= System.currentTimeMillis() },
+            fresh = items.count { it.status == FoodStatus.FRESH && getExpiryStatus(it.expiryDate) != ExpiryStatus.EXPIRED },
             consumed = consumed,
-            wasted = totalWaste,
+            wasted = totalWasteCount,
             expired = expired,
             expiringToday = expiringToday,
             expiringThisWeek = expiringThisWeek,
@@ -225,13 +231,6 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
         if (list.isEmpty()) list.add("Your food inventory looks healthy!")
         list
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("Loading insights..."))
-    
-    private fun isSameDay(t1: Long, t2: Long): Boolean {
-        val cal1 = Calendar.getInstance().apply { timeInMillis = t1 }
-        val cal2 = Calendar.getInstance().apply { timeInMillis = t2 }
-        return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
-               cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
-    }
 
     // Backup & Restore
     fun exportData(context: Context): Uri? {
@@ -246,7 +245,10 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
             val file = File(context.cacheDir, "foodtrack_backup.json")
             file.writeText(json)
             FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        } catch (e: Exception) { null }
+        } catch (e: Exception) { 
+            Log.e("FoodViewModel", "Error exporting data", e)
+            null 
+        }
     }
 
     fun importData(context: Context, uri: Uri) = viewModelScope.launch {
@@ -258,8 +260,11 @@ class FoodViewModel(application: Application) : AndroidViewModel(application) {
                 backupData.shoppingItems.forEach { repository.insertShoppingItem(it) }
                 backupData.wasteRecords.forEach { repository.insertWasteRecord(it) }
                 backupData.goals.forEach { repository.insertGoal(it) }
+                repository.insertActivityRecord(ActivityRecord(foodName = "Backup", action = "RESTORED", details = "Data restored from backup"))
             }
-        } catch (e: Exception) { }
+        } catch (e: Exception) { 
+            Log.e("FoodViewModel", "Error importing data", e)
+        }
     }
 
     // Assistant Logic

@@ -25,6 +25,9 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.assignment.data.FoodItem
 import com.example.assignment.data.FoodStatus
+import com.example.assignment.util.DateUtils
+import com.example.assignment.util.ExpiryStatus
+import com.example.assignment.util.getExpiryStatus
 import com.example.assignment.viewmodel.FoodViewModel
 import com.example.assignment.ui.theme.FoodGreen
 
@@ -60,13 +63,25 @@ fun FoodListScreen(viewModel: FoodViewModel, onNavigateToDetails: (Int) -> Unit)
     val items by viewModel.allItems.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("All") }
+    var selectedStatus by remember { mutableStateOf("All") }
     var sortOption by remember { mutableStateOf(SortOption.EXPIRY_ASC) }
     var showSortMenu by remember { mutableStateOf(false) }
 
-    val filteredAndSortedItems = remember(items, searchQuery, selectedCategory, sortOption) {
-        items.filter {
-            (selectedCategory == "All" || it.category == selectedCategory) &&
-            (it.name.contains(searchQuery, ignoreCase = true) || it.brand.contains(searchQuery, ignoreCase = true))
+    val filteredAndSortedItems = remember(items, searchQuery, selectedCategory, selectedStatus, sortOption) {
+        items.filter { item ->
+            val matchesCategory = selectedCategory == "All" || item.category == selectedCategory
+            val matchesSearch = item.name.contains(searchQuery, ignoreCase = true) || item.brand.contains(searchQuery, ignoreCase = true)
+            
+            val status = getExpiryStatus(item.expiryDate)
+            val matchesStatus = when (selectedStatus) {
+                "All" -> true
+                "Fresh" -> status == ExpiryStatus.FRESH || status == ExpiryStatus.EXPIRING_SOON || status == ExpiryStatus.EXPIRING_TODAY
+                "Expiring Soon" -> status == ExpiryStatus.EXPIRING_SOON || status == ExpiryStatus.EXPIRING_TODAY
+                "Expired" -> status == ExpiryStatus.EXPIRED
+                else -> true
+            }
+            
+            matchesCategory && matchesSearch && matchesStatus
         }.sortedWith(when (sortOption) {
             SortOption.EXPIRY_ASC -> compareBy { it.expiryDate }
             SortOption.EXPIRY_DESC -> compareByDescending { it.expiryDate }
@@ -107,7 +122,7 @@ fun FoodListScreen(viewModel: FoodViewModel, onNavigateToDetails: (Int) -> Unit)
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                placeholder = { Text("Search food or brand...") },
+                placeholder = { Text("Search inventory...") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
@@ -124,6 +139,23 @@ fun FoodListScreen(viewModel: FoodViewModel, onNavigateToDetails: (Int) -> Unit)
                 )
             )
 
+            // Status Chips
+            Row(
+                modifier = Modifier.padding(vertical = 4.dp).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val statuses = listOf("All", "Fresh", "Expiring Soon", "Expired")
+                statuses.forEach { status ->
+                    FilterChip(
+                        selected = selectedStatus == status,
+                        onClick = { selectedStatus = status },
+                        label = { Text(status, style = MaterialTheme.typography.labelSmall) },
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+            }
+
+            // Category Chips
             LazyRow(
                 modifier = Modifier.padding(vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -139,9 +171,6 @@ fun FoodListScreen(viewModel: FoodViewModel, onNavigateToDetails: (Int) -> Unit)
                             selectedContainerColor = FoodGreen,
                             selectedLabelColor = Color.White,
                             selectedLeadingIconColor = Color.White
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            borderColor = if (selectedCategory == cat.name) Color.Transparent else Color.LightGray.copy(alpha = 0.5f)
                         )
                     )
                 }
@@ -222,7 +251,7 @@ fun FoodListItem(item: FoodItem, onClick: () -> Unit) {
                 Text("${item.category} • ${item.quantity} ${item.unit}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             }
             
-            val daysLeft = ((item.expiryDate - System.currentTimeMillis()) / (24 * 60 * 60 * 1000)).toInt()
+            val daysLeft = DateUtils.getDaysRemaining(item.expiryDate).toInt()
             
             val statusColor = when {
                 item.status == FoodStatus.CONSUMED -> Color.Gray

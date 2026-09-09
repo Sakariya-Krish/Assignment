@@ -22,10 +22,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.assignment.data.FoodStatus
+import com.example.assignment.util.DateUtils
 import com.example.assignment.viewmodel.FoodViewModel
-import java.text.SimpleDateFormat
-import java.util.*
 import com.example.assignment.ui.theme.FoodGreen
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,7 +38,6 @@ fun FoodDetailsScreen(
 ) {
     val items by viewModel.allItems.collectAsState()
     val item = items.find { it.id == foodId }
-    val sdf = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
     
     var showWasteDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -90,7 +89,7 @@ fun FoodDetailsScreen(
                         Text(food.category, style = MaterialTheme.typography.titleSmall, color = Color.Gray)
                     }
                     
-                    val daysLeft = ((food.expiryDate - System.currentTimeMillis()) / (24 * 60 * 60 * 1000)).toInt()
+                    val daysLeft = DateUtils.getDaysRemaining(food.expiryDate).toInt()
                     val color = when {
                         food.status == FoodStatus.CONSUMED -> Color.Gray
                         food.status == FoodStatus.WASTED -> Color.Gray
@@ -112,15 +111,15 @@ fun FoodDetailsScreen(
                     }
                 }
                 
-                val daysLeft = ((food.expiryDate - System.currentTimeMillis()) / (24 * 60 * 60 * 1000)).toInt()
+                val daysLeft = DateUtils.getDaysRemaining(food.expiryDate).toInt()
                 
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         DetailRow("Quantity", "${food.quantity} ${food.unit}")
                         if (food.price > 0) DetailRow("Price", "$${String.format(Locale.getDefault(), "%.2f", food.price)}")
                         DetailRow("Storage", food.storageLocation)
-                        DetailRow("Purchase Date", sdf.format(Date(food.purchaseDate)))
-                        DetailRow("Expiry Date", sdf.format(Date(food.expiryDate)))
+                        DetailRow("Purchase Date", DateUtils.formatDisplayDate(food.purchaseDate))
+                        DetailRow("Expiry Date", DateUtils.formatDisplayDate(food.expiryDate))
                         DetailRow("Time Remaining", if (daysLeft < 0) "Expired" else "$daysLeft days left")
                         if (!food.barcode.isNullOrBlank()) DetailRow("Barcode", food.barcode)
                         DetailRow("Notes", food.notes.ifEmpty { "No notes provided" })

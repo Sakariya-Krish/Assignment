@@ -1,12 +1,10 @@
 package com.example.assignment.ui.screens
 
-import android.Manifest
 import android.net.Uri
 import android.os.Environment
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,11 +35,12 @@ import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import com.example.assignment.data.FoodItem
 import com.example.assignment.data.FoodStatus
+import com.example.assignment.ui.components.SectionHeader
+import com.example.assignment.util.DateUtils
 import com.example.assignment.viewmodel.FoodViewModel
 import com.example.assignment.ui.theme.FoodGreen
 import kotlinx.coroutines.launch
 import java.io.File
-import java.text.SimpleDateFormat
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,9 +63,9 @@ fun AddFoodScreen(
     var name by remember(existingItem, preName) { mutableStateOf(existingItem?.name ?: preName ?: "") }
     var brand by remember(existingItem) { mutableStateOf(existingItem?.brand ?: "") }
     var category by remember(existingItem, preCategory) { mutableStateOf(existingItem?.category ?: preCategory ?: "Other") }
-    var quantity by remember(existingItem, preQuantity) { mutableStateOf(existingItem?.quantity ?: preQuantity ?: "") }
+    var quantity by remember(existingItem, preQuantity) { mutableStateOf(existingItem?.quantity ?: preQuantity ?: "1") }
     var unit by remember(existingItem) { mutableStateOf(existingItem?.unit ?: "Pieces") }
-    var price by remember(existingItem) { mutableStateOf(existingItem?.price?.toString() ?: "") }
+    var price by remember(existingItem) { mutableStateOf(existingItem?.price?.let { if (it > 0) it.toString() else "" } ?: "") }
     var storageLocation by remember(existingItem) { mutableStateOf(existingItem?.storageLocation ?: "Refrigerator") }
     var purchaseDate by remember(existingItem) { mutableStateOf(existingItem?.purchaseDate ?: System.currentTimeMillis()) }
     var expiryDate by remember(existingItem) { mutableStateOf(existingItem?.expiryDate ?: (System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L)) }
@@ -82,8 +81,6 @@ fun AddFoodScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-
-    val sdf = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
 
     // Image Handlers
     val photoPickerLauncher = rememberLauncherForActivityResult(
@@ -108,23 +105,19 @@ fun AddFoodScreen(
             Button(
                 onClick = {
                     if (name.isBlank()) {
-                        scope.launch {
-                            snackbarHostState.showSnackbar("Food name is required")
-                        }
+                        scope.launch { snackbarHostState.showSnackbar("Please enter a food name") }
                         return@Button
                     }
                     if (expiryDate < purchaseDate) {
-                        scope.launch {
-                            snackbarHostState.showSnackbar("Expiry date cannot be before purchase date")
-                        }
+                        scope.launch { snackbarHostState.showSnackbar("Expiry date cannot be before purchase date") }
                         return@Button
                     }
 
                     isSaving = true
                     val item = FoodItem(
                         id = if (foodId == -1) 0 else foodId,
-                        name = name,
-                        brand = brand,
+                        name = name.trim(),
+                        brand = brand.trim(),
                         category = category,
                         quantity = quantity,
                         unit = unit,
@@ -132,7 +125,7 @@ fun AddFoodScreen(
                         purchaseDate = purchaseDate,
                         expiryDate = expiryDate,
                         storageLocation = storageLocation,
-                        notes = notes,
+                        notes = notes.trim(),
                         status = if (expiryDate < System.currentTimeMillis()) FoodStatus.EXPIRED else FoodStatus.FRESH,
                         imageUri = imageUri,
                         barcode = barcode,
@@ -153,9 +146,9 @@ fun AddFoodScreen(
                 if (isSaving) {
                     CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
                 } else {
-                    Icon(Icons.Default.Add, contentDescription = null)
+                    Icon(if (foodId == -1) Icons.Default.Add else Icons.Default.Save, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text(if (foodId == -1) "Add Food" else "Update Food", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(if (foodId == -1) "Add Food Item" else "Update Food Item", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -169,19 +162,20 @@ fun AddFoodScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             Text(
-                if (foodId == -1) "Add New Food" else "Edit Food",
+                if (foodId == -1) "New Food Entry" else "Edit Food Details",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = FoodGreen
             )
 
-            // 1. Food Image
+            // 1. Food Image Section
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(200.dp)
                     .clip(RoundedCornerShape(24.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                 contentAlignment = Alignment.Center
             ) {
                 if (imageUri != null) {
@@ -203,22 +197,22 @@ fun AddFoodScreen(
                     }
                 } else {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Fastfood, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
+                        Icon(Icons.Default.AddAPhoto, contentDescription = null, modifier = Modifier.size(48.dp), tint = Color.Gray)
                         Spacer(Modifier.height(8.dp))
-                        Text("Add a photo", color = Color.Gray)
+                        Text("Add Photo", color = Color.Gray, style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(
-                    onClick = { photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    onClick = onNavigateToScanner,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Icon(Icons.Default.PhotoLibrary, contentDescription = null)
+                    Icon(Icons.Default.QrCodeScanner, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Gallery")
+                    Text("Barcode")
                 }
                 OutlinedButton(
                     onClick = {
@@ -235,23 +229,25 @@ fun AddFoodScreen(
                 }
             }
 
-            // 2. Food Info
+            // 2. Food Information
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Food Name *") },
+                label = { Text("Product Name *") },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                leadingIcon = { Icon(Icons.Default.Label, contentDescription = null) }
+                leadingIcon = { Icon(Icons.Default.Label, contentDescription = null) },
+                singleLine = true
             )
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = brand,
                     onValueChange = { brand = it },
-                    label = { Text("Brand") },
+                    label = { Text("Brand (Optional)") },
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true
                 )
                 OutlinedTextField(
                     value = price,
@@ -260,12 +256,12 @@ fun AddFoodScreen(
                     modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     shape = RoundedCornerShape(12.dp),
-                    prefix = { Text("$") }
+                    prefix = { Text("$") },
+                    singleLine = true
                 )
             }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Category
                 ExposedDropdownMenuBox(
                     expanded = categoryExpanded,
                     onExpandedChange = { categoryExpanded = !categoryExpanded },
@@ -290,17 +286,16 @@ fun AddFoodScreen(
                     }
                 }
 
-                // Quantity
                 OutlinedTextField(
                     value = quantity,
                     onValueChange = { quantity = it },
                     label = { Text("Qty") },
                     modifier = Modifier.width(80.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true
                 )
 
-                // Unit
                 ExposedDropdownMenuBox(
                     expanded = unitExpanded,
                     onExpandedChange = { unitExpanded = !unitExpanded },
@@ -326,13 +321,13 @@ fun AddFoodScreen(
                 }
             }
 
-            // 3. Dates
+            // 3. Date Selection
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
-                    value = sdf.format(Date(purchaseDate)),
+                    value = DateUtils.formatDisplayDate(purchaseDate),
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Purchase Date") },
+                    label = { Text("Purchased") },
                     modifier = Modifier.weight(1f).clickable { showPurchaseDatePicker = true },
                     enabled = false,
                     colors = OutlinedTextFieldDefaults.colors(
@@ -341,13 +336,13 @@ fun AddFoodScreen(
                         disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
                     ),
                     shape = RoundedCornerShape(12.dp),
-                    trailingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.clickable { showPurchaseDatePicker = true }) }
+                    trailingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(20.dp)) }
                 )
                 OutlinedTextField(
-                    value = sdf.format(Date(expiryDate)),
+                    value = DateUtils.formatDisplayDate(expiryDate),
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Expiry Date *") },
+                    label = { Text("Expires *") },
                     modifier = Modifier.weight(1f).clickable { showExpiryDatePicker = true },
                     enabled = false,
                     colors = OutlinedTextFieldDefaults.colors(
@@ -356,18 +351,23 @@ fun AddFoodScreen(
                         disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
                     ),
                     shape = RoundedCornerShape(12.dp),
-                    trailingIcon = { Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.clickable { showExpiryDatePicker = true }) }
+                    trailingIcon = { Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(20.dp)) }
                 )
             }
 
-            val daysLeft = ((expiryDate - System.currentTimeMillis()) / (24 * 60 * 60 * 1000L)).toInt()
-            Text(
-                text = if (daysLeft < 0) "Already expired!" else "Expires in $daysLeft days",
-                color = if (daysLeft < 0) Color.Red else if (daysLeft < 3) Color(0xFFFF9800) else FoodGreen,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 4.dp)
-            )
+            val daysLeft = DateUtils.getDaysRemaining(expiryDate).toInt()
+            Surface(
+                color = (if (daysLeft < 0) Color.Red else if (daysLeft < 3) Color(0xFFFF9800) else FoodGreen).copy(alpha = 0.1f),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text(
+                    text = if (daysLeft < 0) "Expired $daysLeft days ago" else "Expires in $daysLeft days",
+                    color = if (daysLeft < 0) Color.Red else if (daysLeft < 3) Color(0xFFFF9800) else FoodGreen,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
 
             // 4. Storage Location
             Text("Storage Location", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -394,26 +394,28 @@ fun AddFoodScreen(
             OutlinedTextField(
                 value = notes,
                 onValueChange = { notes = it },
-                label = { Text("Notes") },
-                placeholder = { Text("Add notes about this food...") },
+                label = { Text("Additional Notes") },
+                placeholder = { Text("e.g. Keep away from sunlight...") },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 3,
                 shape = RoundedCornerShape(12.dp)
             )
 
-            // Expiry Preview
+            // Preview
             if (name.isNotBlank()) {
-                Text("Preview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                SectionHeader("Smart Preview")
                 ExpiryPreviewCard(name, category, quantity, unit, expiryDate)
             }
 
-            // Recently Added
+            // Recent History
             if (recentItems.isNotEmpty()) {
-                Text("Recently Added", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                SectionHeader("Recently Added")
                 recentItems.forEach { item ->
                     RecentItemRow(item)
                 }
             }
+            
+            Spacer(Modifier.height(80.dp))
         }
     }
 
@@ -425,7 +427,10 @@ fun AddFoodScreen(
                 TextButton(onClick = {
                     purchaseDate = datePickerState.selectedDateMillis ?: purchaseDate
                     showPurchaseDatePicker = false
-                }) { Text("OK") }
+                }) { Text("Confirm") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPurchaseDatePicker = false }) { Text("Cancel") }
             }
         ) { DatePicker(state = datePickerState) }
     }
@@ -438,7 +443,10 @@ fun AddFoodScreen(
                 TextButton(onClick = {
                     expiryDate = datePickerState.selectedDateMillis ?: expiryDate
                     showExpiryDatePicker = false
-                }) { Text("OK") }
+                }) { Text("Confirm") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExpiryDatePicker = false }) { Text("Cancel") }
             }
         ) { DatePicker(state = datePickerState) }
     }
@@ -448,32 +456,34 @@ fun AddFoodScreen(
 fun StorageChip(label: String, icon: ImageVector, isSelected: Boolean, onClick: () -> Unit) {
     Surface(
         modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .border(
                 width = 1.dp,
-                color = if (isSelected) FoodGreen else Color.LightGray.copy(alpha = 0.5f),
+                color = if (isSelected) FoodGreen else Color.LightGray.copy(alpha = 0.3f),
                 shape = RoundedCornerShape(12.dp)
             ),
         color = if (isSelected) FoodGreen.copy(alpha = 0.1f) else Color.Transparent,
         shape = RoundedCornerShape(12.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(icon, contentDescription = null, tint = if (isSelected) FoodGreen else Color.Gray, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(label, color = if (isSelected) FoodGreen else Color.Gray, style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.width(10.dp))
+            Text(label, color = if (isSelected) FoodGreen else Color.Gray, style = MaterialTheme.typography.labelMedium, fontWeight = if(isSelected) FontWeight.Bold else FontWeight.Normal)
         }
     }
 }
 
 @Composable
 fun ExpiryPreviewCard(name: String, category: String, qty: String, unit: String, expiry: Long) {
-    val daysLeft = ((expiry - System.currentTimeMillis()) / (24 * 60 * 60 * 1000L)).toInt()
+    val daysLeft = DateUtils.getDaysRemaining(expiry).toInt()
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
@@ -482,16 +492,16 @@ fun ExpiryPreviewCard(name: String, category: String, qty: String, unit: String,
             }
             Column(horizontalAlignment = Alignment.End) {
                 val color = if (daysLeft < 0) Color.Red else if (daysLeft < 3) Color(0xFFFF9800) else FoodGreen
-                Surface(color = color.copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp)) {
+                Surface(color = color.copy(alpha = 0.15f), shape = RoundedCornerShape(10.dp)) {
                     Text(
                         text = if (daysLeft < 0) "Expired" else "Fresh",
                         color = color,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                         fontSize = 12.sp
                     )
                 }
-                Text(if (daysLeft < 0) "Passed" else "Expires in $daysLeft d", style = MaterialTheme.typography.labelSmall, color = color)
+                Text(if (daysLeft < 0) "Passed" else "In $daysLeft d", style = MaterialTheme.typography.labelSmall, color = color)
             }
         }
     }
@@ -499,29 +509,29 @@ fun ExpiryPreviewCard(name: String, category: String, qty: String, unit: String,
 
 @Composable
 fun RecentItemRow(item: FoodItem) {
-    val daysLeft = ((item.expiryDate - System.currentTimeMillis()) / (24 * 60 * 60 * 1000L)).toInt()
+    val daysLeft = DateUtils.getDaysRemaining(item.expiryDate).toInt()
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (item.imageUri != null) {
             AsyncImage(
                 model = item.imageUri,
                 contentDescription = null,
-                modifier = Modifier.size(40.dp).clip(CircleShape),
+                modifier = Modifier.size(44.dp).clip(CircleShape),
                 contentScale = ContentScale.Crop
             )
         } else {
-            Box(Modifier.size(40.dp).background(Color.LightGray.copy(alpha = 0.3f), CircleShape), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Fastfood, contentDescription = null, modifier = Modifier.size(20.dp), tint = Color.Gray)
+            Box(Modifier.size(44.dp).background(Color.LightGray.copy(alpha = 0.2f), CircleShape), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Fastfood, contentDescription = null, modifier = Modifier.size(22.dp), tint = Color.Gray)
             }
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(item.name, fontWeight = FontWeight.Medium)
-            Text("Expires ${SimpleDateFormat("MMM dd", Locale.getDefault()).format(Date(item.expiryDate))}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            Text(item.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+            Text("Expires ${DateUtils.formatDisplayDate(item.expiryDate)}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
         }
         val color = if (daysLeft < 0) Color.Red else if (daysLeft < 3) Color(0xFFFF9800) else FoodGreen
-        Text(if (daysLeft < 0) "Expired" else "$daysLeft d", color = color, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text(if (daysLeft < 0) "Expired" else "$daysLeft d", color = color, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
     }
 }

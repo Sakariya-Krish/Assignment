@@ -22,6 +22,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.assignment.data.FoodItem
 import com.example.assignment.data.FoodStatus
+import com.example.assignment.ui.components.SectionHeader
+import com.example.assignment.util.DateUtils
+import com.example.assignment.util.ExpiryStatus
+import com.example.assignment.util.getExpiryStatus
 import com.example.assignment.viewmodel.FoodViewModel
 import com.example.assignment.ui.theme.FoodGreen
 import java.util.*
@@ -43,7 +47,7 @@ fun HomeScreen(
     var selectedRecipe by remember { mutableStateOf<com.example.assignment.viewmodel.Recipe?>(null) }
 
     val freshItems = items.filter { it.status == FoodStatus.FRESH }
-    val expiringToday = freshItems.filter { isSameDay(it.expiryDate, System.currentTimeMillis()) }
+    val expiringToday = freshItems.filter { getExpiryStatus(it.expiryDate) == ExpiryStatus.EXPIRING_TODAY }
     val useFirst = freshItems.sortedBy { it.expiryDate }.take(5)
     
     val toBuyCount = shoppingItems.count { !it.isPurchased }
@@ -154,27 +158,27 @@ fun HomeScreen(
                             Text("Shopping List", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text(if (toBuyCount > 0) "$toBuyCount items to buy" else "Everything purchased", style = MaterialTheme.typography.bodySmall)
                         }
-                        Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.Gray)
+                        Icon(Icons.Default.ArrowForwardIos, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.Gray)
                     }
                 }
             }
 
             if (expiringToday.isNotEmpty()) {
-                item { SectionHeader("Expiring Today", Color.Red) }
+                item { SectionHeader("Expiring Today", color = Color.Red) }
                 items(expiringToday) { item ->
                     FoodSummaryItem(item, onClick = { onNavigateToDetails(item.id) })
                 }
             }
 
             if (useFirst.isNotEmpty()) {
-                item { SectionHeader("Use First", FoodGreen) }
+                item { SectionHeader("Use First", color = FoodGreen) }
                 items(useFirst) { item ->
                     FoodSummaryItem(item, onClick = { onNavigateToDetails(item.id) })
                 }
             }
 
             if (recipes.isNotEmpty()) {
-                item { SectionHeader("What Can I Cook?", FoodGreen) }
+                item { SectionHeader("What Can I Cook?", color = FoodGreen) }
                 item {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
                         items(recipes) { recipe -> 
@@ -197,6 +201,26 @@ fun HomeScreen(
                 selectedRecipe = null
             }
         )
+    }
+}
+
+@Composable
+fun QuickActionCard(label: String, icon: ImageVector, modifier: Modifier, onClick: () -> Unit) {
+    Card(
+        modifier = modifier.clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = FoodGreen, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.height(8.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        }
     }
 }
 
@@ -241,37 +265,6 @@ fun RecipeDetailsDialog(recipe: com.example.assignment.viewmodel.Recipe, onDismi
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("Close") }
         }
-    )
-}
-
-@Composable
-fun QuickActionCard(label: String, icon: ImageVector, modifier: Modifier, onClick: () -> Unit) {
-    Card(
-        modifier = modifier.clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Icon(icon, contentDescription = null, tint = FoodGreen, modifier = Modifier.size(28.dp))
-            Spacer(Modifier.height(8.dp))
-            Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        }
-    }
-}
-
-@Composable
-fun SectionHeader(title: String, color: Color) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        color = color,
-        modifier = Modifier.padding(vertical = 4.dp)
     )
 }
 
@@ -326,7 +319,7 @@ fun FoodSummaryItem(item: FoodItem, onClick: () -> Unit) {
                 Text(item.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(item.category, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             }
-            val daysLeft = ((item.expiryDate - System.currentTimeMillis()) / (24 * 60 * 60 * 1000)).toInt()
+            val daysLeft = DateUtils.getDaysRemaining(item.expiryDate).toInt()
             
             val statusText = when {
                 item.status == FoodStatus.CONSUMED -> "Consumed"
@@ -358,11 +351,4 @@ fun FoodSummaryItem(item: FoodItem, onClick: () -> Unit) {
             }
         }
     }
-}
-
-private fun isSameDay(t1: Long, t2: Long): Boolean {
-    val cal1 = Calendar.getInstance().apply { timeInMillis = t1 }
-    val cal2 = Calendar.getInstance().apply { timeInMillis = t2 }
-    return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
-           cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
 }
